@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OREUN TAXONOMY · 2026-06-29</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+:root {
+  --bg:       #0b0e13;
+  --bg-card:  #141920;
+  --border:   #1e2530;
+  --text:     #e6edf3;
+  --text-dim: #8b949e;
+  --accent:   #e3b341;
+  --accent2:  #79c0ff;
+  --green:    #3fb950;
+  --red:      #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Pretendard Variable", Pretendard,
+               "Apple SD Gothic Neo", BlinkMacSystemFont, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+#header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  height: 50px; flex-shrink: 0;
+}
+.h-brand { font-size: 13px; font-weight: 800; color: var(--accent); letter-spacing: 0.1em; }
+.h-sep   { width: 1px; height: 18px; background: var(--border); flex-shrink:0; }
+.h-meta  { font-size: 11px; color: var(--text-dim); }
+.h-breadcrumb { font-size: 13px; color: var(--text-dim); }
+.h-breadcrumb b { color: var(--text); font-weight: 700; }
+.h-stats {
+  margin-left: auto; display: flex; gap: 24px;
+  font-size: 11px; color: var(--text-dim);
+}
+.h-stats b { color: var(--text); font-size: 14px; font-weight: 700; }
+.h-top1 b  { color: var(--accent); }
+
+/* back button */
+#back-btn {
+  display: none; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-dim); font-size: 12px;
+  cursor: pointer; font-family: inherit; flex-shrink: 0;
+  transition: border-color .15s, color .15s;
+}
+#back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Chart ── */
+#chart-wrap { position: relative; width: 100%; height: calc(100vh - 50px); }
+#treemap { display: block; }
+
+/* ── SVG: overview ── */
+.l1-bg-hit { cursor: pointer; }
+.l1-bg-hit:hover + .l1-bg-fill { opacity: .85; }
+.l1-bg-fill { transition: opacity .15s; }
+.l1-hint { font-size: 9px; fill: rgba(230,237,243,.3); pointer-events: none;
+           font-style: italic; }
+.l1-lbl  { font-size: 10px; font-weight: 800; fill: rgba(230,237,243,.78);
+           letter-spacing: .07em; text-transform: uppercase; pointer-events: none; }
+.l2-lbl  { font-size: 9px; font-weight: 600; fill: rgba(230,237,243,.5);
+           pointer-events: none; }
+.l3-name { font-size: 10px; font-weight: 600; fill: rgba(230,237,243,.9);
+           dominant-baseline: hanging; pointer-events: none; }
+.l3-score{ font-size: 14px; font-weight: 800; fill: rgba(255,255,255,.95);
+           pointer-events: none; }
+.l3-rank { font-size: 9px; fill: rgba(230,237,243,.45); pointer-events: none; }
+.l3-cell { cursor: default; }
+.l3-cell:hover rect.fill { stroke: var(--accent) !important; stroke-width: 1.5px; }
+
+/* ── SVG: sector view ── */
+.sv-l2-bg  { }
+.sv-l2-lbl { font-size: 11px; font-weight: 800; fill: rgba(230,237,243,.85);
+             letter-spacing: .04em; pointer-events: none; }
+.sv-l3-name{ font-size: 11px; font-weight: 700; fill: rgba(230,237,243,.92);
+             dominant-baseline: hanging; pointer-events: none; }
+.sv-l3-score { font-size: 20px; font-weight: 900; fill: rgba(255,255,255,.96);
+               pointer-events: none; }
+.sv-l3-rank  { font-size: 10px; fill: rgba(230,237,243,.5); pointer-events: none; }
+.sv-chip  { font-size: 9px; fill: rgba(230,237,243,.6); pointer-events: none; }
+
+/* ── Tooltip ── */
+#tooltip {
+  position: fixed; display: none; pointer-events: none;
+  z-index: 999; width: 272px;
+  background: #1a2230; border: 1px solid #2d3748;
+  border-radius: 10px; padding: 13px 15px;
+  font-size: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.7);
+}
+.tt-name  { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.tt-code  { font-size: 10px; color: var(--text-dim); font-family: monospace; margin-bottom: 10px; }
+.tt-score-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+.tt-score-val { font-size: 28px; font-weight: 900; line-height: 1; color: var(--accent); }
+.tt-score-sub { font-size: 11px; color: var(--text-dim); line-height: 1.6; }
+.tt-score-sub .rank { color: var(--text); font-weight: 700; }
+.tt-up { color: var(--green); } .tt-dn { color: var(--red); } .tt-nc { color: var(--text-dim); }
+.bar-row  { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+.bar-lbl  { width: 70px; font-size: 10px; color: var(--text-dim); flex-shrink:0; }
+.bar-bg   { flex:1; height:5px; background:#1e2530; border-radius:3px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:3px; }
+.bar-val  { width:26px; font-size:10px; color:var(--text-dim); text-align:right; flex-shrink:0; }
+.tt-div   { border-top:1px solid #1e2530; margin: 9px 0 8px; }
+.tt-chips-lbl { font-size:10px; color:var(--text-dim); margin-bottom:5px; }
+.chips    { display:flex; flex-wrap:wrap; gap:4px; }
+.chip     { font-size:10px; padding:2px 7px; background:#1e2530; border-radius:5px;
+            color:var(--text); border:1px solid #2d3748; }
+.tt-inactive { font-size:12px; color:var(--text-dim); margin-bottom:6px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span class="h-brand">OREUN TAXONOMY</span>
+  <div class="h-sep"></div>
+  <span class="h-meta">2026-06-29 · v1.3.3 · KST</span>
+  <span class="h-breadcrumb" id="h-breadcrumb"></span>
+  <button id="back-btn" onclick="goOverview()">← 전체 보기</button>
+  <div class="h-stats">
+    <div id="h-stat-l3">Active <b>133</b> / 151 L3</div>
+    <div class="h-top1" id="h-stat-top">Top1 <b>리튬이온 셀</b> <b>66</b></div>
+  </div>
+</div>
+
+<div id="chart-wrap">
+  <svg id="treemap"></svg>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const DATA = {"name": "OREUN TAXONOMY", "date": "2026-06-29", "level": 0, "children": [{"code": "EE", "name": "전기전자", "level": 1, "children": [{"code": "EE-SEMI", "name": "반도체", "level": 2, "children": [{"code": "EE-SEMI-HBM", "name": "HBM 메모리", "level": 3, "tier": 1, "score": 32, "rank": 24, "delta": 0, "tag": "📊", "active_stocks": ["000660", "005930", "042700", "240810", "241770", "403870"], "sc_theme": 70, "sc_stock": 0, "sc_supply": 0, "value": 32}, {"code": "EE-SEMI-HBF", "name": "HBF 고대역폭플래시", "level": 3, "tier": 2, "score": 28, "rank": 30, "delta": 0, "tag": "📊", "active_stocks": ["000660", "005930", "042700"], "sc_theme": 62, "sc_stock": 0, "sc_supply": 0, "value": 28}, {"code": "EE-SEMI-MEMORY", "name": "메모리 (DRAM/NAND)", "level": 3, "tier": 1, "score": 46, "rank": 17, "delta": 0, "tag": "📈", "active_stocks": ["000660", "005930", "005935"], "sc_theme": 68, "sc_stock": 43, "sc_supply": 0, "value": 46}, {"code": "EE-SEMI-FOUNDRY", "name": "파운드리", "level": 3, "tier": 1, "score": 28, "rank": 29, "delta": 0, "tag": "📊", "active_stocks": ["005930", "058470", "095340"], "sc_theme": 63, "sc_stock": 0, "sc_supply": 0, "value": 28}, {"code": "EE-SEMI-FABLESS", "name": "팹리스", "level": 3, "tier": 2, "score": 1, "rank": 130, "delta": 0, "tag": "📉", "active_stocks": ["377480"], "sc_theme": 3, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "EE-SEMI-EQUIP", "name": "반도체 장비", "level": 3, "tier": 1, "score": 25, "rank": 35, "delta": 0, "tag": "📊", "active_stocks": ["039030", "042700", "095340", "140860", "240810", "403870"], "sc_theme": 55, "sc_stock": 0, "sc_supply": 0, "value": 25}, {"code": "EE-SEMI-MATERIAL", "name": "반도체 소재", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "EE-SEMI-EUV-PR", "name": "EUV 포토레지스트", "level": 3, "tier": 2, "score": 10, "rank": 104, "delta": 0, "tag": "📉", "active_stocks": ["000990"], "sc_theme": 23, "sc_stock": 0, "sc_supply": 0, "value": 10}, {"code": "EE-SEMI-GLASS", "name": "유리기판", "level": 3, "tier": 1, "score": 19, "rank": 62, "delta": 0, "tag": "📉", "active_stocks": ["007660", "036930", "161580"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "EE-SEMI-ADVPACK", "name": "첨단 패키징 (FOPLP/CoWoS-K)", "level": 3, "tier": 1, "score": 29, "rank": 26, "delta": 0, "tag": "📊", "active_stocks": ["000990", "005930", "009150", "036930", "064290", "330860"], "sc_theme": 64, "sc_stock": 0, "sc_supply": 0, "value": 29}, {"code": "EE-SEMI-TPU", "name": "구글 TPU/ASIC 밸류체인", "level": 3, "tier": 1, "score": 22, "rank": 39, "delta": 0, "tag": "📊", "active_stocks": ["007660", "058470", "095340", "377480"], "sc_theme": 49, "sc_stock": 0, "sc_supply": 0, "value": 22}, {"code": "EE-SEMI-CXL", "name": "CXL 메모리 풀링", "level": 3, "tier": 2, "score": 28, "rank": 28, "delta": 0, "tag": "📊", "active_stocks": ["000660", "005930"], "sc_theme": 62, "sc_stock": 0, "sc_supply": 0, "value": 28}, {"code": "EE-SEMI-SOCAMM", "name": "SOCAMM 차세대 폼팩터", "level": 3, "tier": 2, "score": 28, "rank": 27, "delta": 0, "tag": "📊", "active_stocks": ["000660", "005930"], "sc_theme": 62, "sc_stock": 0, "sc_supply": 0, "value": 28}]}, {"code": "EE-DISPLAY", "name": "디스플레이", "level": 2, "children": [{"code": "EE-DISPLAY-OLED-IT", "name": "OLED IT (태블릿·노트북)", "level": 3, "tier": 2, "score": 22, "rank": 38, "delta": 0, "tag": "📊", "active_stocks": ["009150", "034220"], "sc_theme": 50, "sc_stock": 0, "sc_supply": 0, "value": 22}, {"code": "EE-DISPLAY-MICROLED", "name": "MicroLED·폴더블", "level": 3, "tier": 3, "score": 27, "rank": 32, "delta": 0, "tag": "📊", "active_stocks": ["005930", "011070", "034220"], "sc_theme": 60, "sc_stock": 0, "sc_supply": 0, "value": 27}]}, {"code": "EE-COMPONENT", "name": "전자부품", "level": 2, "children": [{"code": "EE-COMPONENT-MLCC", "name": "MLCC", "level": 3, "tier": 2, "score": 21, "rank": 45, "delta": 0, "tag": "📊", "active_stocks": ["009150", "020150"], "sc_theme": 46, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "EE-COMPONENT-CAMERA", "name": "카메라 모듈", "level": 3, "tier": 2, "score": 18, "rank": 75, "delta": 0, "tag": "📉", "active_stocks": ["011070"], "sc_theme": 40, "sc_stock": 0, "sc_supply": 0, "value": 18}]}]}, {"code": "IT", "name": "IT·소프트웨어", "level": 1, "children": [{"code": "IT-AI", "name": "인공지능", "level": 2, "children": [{"code": "IT-AI-AGENT", "name": "AI 에이전트·피지컬AI", "level": 3, "tier": 1, "score": 50, "rank": 12, "delta": 0, "tag": "📈", "active_stocks": ["018260", "035420", "064400", "304100"], "sc_theme": 44, "sc_stock": 86, "sc_supply": 0, "value": 50}, {"code": "IT-AI-QUANTUM", "name": "양자 컴퓨팅 S/W", "level": 3, "tier": 2, "score": 6, "rank": 118, "delta": 0, "tag": "📉", "active_stocks": ["131090", "203650"], "sc_theme": 14, "sc_stock": 0, "sc_supply": 0, "value": 6}, {"code": "IT-AI-XR", "name": "AR/VR/XR", "level": 3, "tier": 3, "score": 20, "rank": 56, "delta": 0, "tag": "📊", "active_stocks": ["011070", "034220"], "sc_theme": 45, "sc_stock": 0, "sc_supply": 0, "value": 20}, {"code": "IT-AI-GEMINI", "name": "구글 제미나이 생태계", "level": 3, "tier": 1, "score": 14, "rank": 94, "delta": 0, "tag": "📉", "active_stocks": ["108490"], "sc_theme": 30, "sc_stock": 0, "sc_supply": 0, "value": 14}]}, {"code": "IT-SW", "name": "소프트웨어·플랫폼", "level": 2, "children": [{"code": "IT-SW-PLATFORM", "name": "플랫폼 (네이버/카카오)", "level": 3, "tier": 1, "score": 36, "rank": 23, "delta": 0, "tag": "📊", "active_stocks": ["035420", "035720", "323410", "377300"], "sc_theme": 45, "sc_stock": 44, "sc_supply": 0, "value": 36}, {"code": "IT-SW-ENTERPRISE", "name": "엔터프라이즈 SW", "level": 3, "tier": 2, "score": 16, "rank": 84, "delta": 0, "tag": "📉", "active_stocks": ["012510", "018260", "064400"], "sc_theme": 36, "sc_stock": 0, "sc_supply": 0, "value": 16}]}, {"code": "IT-GAME", "name": "게임", "level": 2, "children": [{"code": "IT-GAME-SUPERCELL", "name": "대작 게임 (MMORPG/신작)", "level": 3, "tier": 1, "score": 13, "rank": 95, "delta": 0, "tag": "📉", "active_stocks": ["036570", "263750", "293490"], "sc_theme": 28, "sc_stock": 0, "sc_supply": 0, "value": 13}]}]}, {"code": "COMM", "name": "통신·미디어", "level": 1, "children": [{"code": "COMM-TELCO", "name": "통신사", "level": 2, "children": [{"code": "COMM-TELCO-5G6G", "name": "5G/6G 인프라", "level": 3, "tier": 2, "score": 14, "rank": 93, "delta": 0, "tag": "📉", "active_stocks": ["017670", "030200", "032640"], "sc_theme": 30, "sc_stock": 0, "sc_supply": 0, "value": 14}]}, {"code": "COMM-ENTER", "name": "엔터·콘텐츠", "level": 2, "children": [{"code": "COMM-ENTER-KPOP", "name": "K-POP 엔터", "level": 3, "tier": 1, "score": 12, "rank": 100, "delta": 0, "tag": "📉", "active_stocks": ["035900", "041510", "122870", "352820"], "sc_theme": 27, "sc_stock": 0, "sc_supply": 0, "value": 12}, {"code": "COMM-ENTER-CONTENT", "name": "영상/드라마 콘텐츠", "level": 3, "tier": 2, "score": 4, "rank": 121, "delta": 0, "tag": "📉", "active_stocks": ["259960"], "sc_theme": 10, "sc_stock": 0, "sc_supply": 0, "value": 4}, {"code": "COMM-ENTER-WEBTOON", "name": "웹툰·IP", "level": 3, "tier": 2, "score": 18, "rank": 73, "delta": 0, "tag": "📉", "active_stocks": ["035420", "035720"], "sc_theme": 39, "sc_stock": 0, "sc_supply": 0, "value": 18}]}]}, {"code": "AUTO", "name": "자동차·부품", "level": 1, "children": [{"code": "AUTO-OEM", "name": "완성차 OEM", "level": 2, "children": [{"code": "AUTO-OEM-KR", "name": "한국 완성차 (현대·기아)", "level": 3, "tier": 1, "score": 40, "rank": 21, "delta": 0, "tag": "📈", "active_stocks": ["000270", "005380", "012330"], "sc_theme": 47, "sc_stock": 55, "sc_supply": 0, "value": 40}]}, {"code": "AUTO-PART", "name": "자동차 부품", "level": 2, "children": [{"code": "AUTO-PART-TRAD", "name": "전통 부품", "level": 3, "tier": 2, "score": 42, "rank": 20, "delta": 0, "tag": "📈", "active_stocks": ["012330", "018880", "204320"], "sc_theme": 45, "sc_stock": 63, "sc_supply": 0, "value": 42}, {"code": "AUTO-PART-UNIVERSAL", "name": "모빌리티 범용부품 (베어링·감속기)", "level": 3, "tier": 2, "score": 10, "rank": 105, "delta": 0, "tag": "📉", "active_stocks": ["058610"], "sc_theme": 23, "sc_stock": 0, "sc_supply": 0, "value": 10}]}, {"code": "AUTO-TECH", "name": "자동차 기술", "level": 2, "children": [{"code": "AUTO-TECH-AUTONOMOUS", "name": "자율주행", "level": 3, "tier": 1, "score": 19, "rank": 65, "delta": 0, "tag": "📉", "active_stocks": ["005380", "012330", "204320"], "sc_theme": 42, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "AUTO-TECH-UAM", "name": "UAM·도심항공", "level": 3, "tier": 2, "score": 14, "rank": 88, "delta": 0, "tag": "📉", "active_stocks": ["047810", "177350"], "sc_theme": 31, "sc_stock": 0, "sc_supply": 0, "value": 14}, {"code": "AUTO-TECH-EV-CHARGER", "name": "EV 충전 인프라", "level": 3, "tier": 3, "score": 30, "rank": 25, "delta": 0, "tag": "📊", "active_stocks": [], "sc_theme": 10, "sc_stock": 73, "sc_supply": 0, "value": 30}]}]}, {"code": "BAT", "name": "2차전지·소재", "level": 1, "children": [{"code": "BAT-CELL", "name": "배터리 셀", "level": 2, "children": [{"code": "BAT-CELL-LIB", "name": "리튬이온 셀", "level": 3, "tier": 1, "score": 66, "rank": 1, "delta": 0, "tag": "📈", "active_stocks": ["006400", "051910", "096770", "373220"], "sc_theme": 68, "sc_stock": 100, "sc_supply": 0, "value": 66}, {"code": "BAT-CELL-SOLID", "name": "전고체 전지", "level": 3, "tier": 2, "score": 20, "rank": 54, "delta": 0, "tag": "📊", "active_stocks": ["006400", "373220"], "sc_theme": 45, "sc_stock": 0, "sc_supply": 0, "value": 20}]}, {"code": "BAT-CATHODE", "name": "양극재", "level": 2, "children": [{"code": "BAT-CATHODE-LFP", "name": "LFP 양극재", "level": 3, "tier": 2, "score": 16, "rank": 80, "delta": 0, "tag": "📉", "active_stocks": ["003670", "247540"], "sc_theme": 36, "sc_stock": 0, "sc_supply": 0, "value": 16}, {"code": "BAT-CATHODE-HIGHNI", "name": "하이니켈 양극재", "level": 3, "tier": 1, "score": 54, "rank": 9, "delta": 0, "tag": "📈", "active_stocks": ["003670", "020150", "066970", "247540"], "sc_theme": 42, "sc_stock": 100, "sc_supply": 0, "value": 54}]}, {"code": "BAT-ANODE", "name": "음극재", "level": 2, "children": [{"code": "BAT-ANODE-SILICON", "name": "실리콘 음극재", "level": 3, "tier": 2, "score": 7, "rank": 115, "delta": 0, "tag": "📉", "active_stocks": ["003670", "078600"], "sc_theme": 16, "sc_stock": 0, "sc_supply": 0, "value": 7}]}, {"code": "BAT-ESS", "name": "ESS 전용", "level": 2, "children": [{"code": "BAT-ESS-GRID", "name": "ESS 그리드용 셀", "level": 3, "tier": 1, "score": 57, "rank": 6, "delta": 0, "tag": "📈", "active_stocks": ["006400", "373220"], "sc_theme": 48, "sc_stock": 100, "sc_supply": 0, "value": 57}]}, {"code": "BAT-RECYCLE", "name": "재활용", "level": 2, "children": [{"code": "BAT-RECYCLE-MAIN", "name": "2차전지 재활용", "level": 3, "tier": 2, "score": 4, "rank": 123, "delta": 0, "tag": "📉", "active_stocks": ["020150", "365340"], "sc_theme": 9, "sc_stock": 0, "sc_supply": 0, "value": 4}]}]}, {"code": "ENERGY", "name": "에너지·유틸리티", "level": 1, "children": [{"code": "ENERGY-NUCLEAR", "name": "원자력", "level": 2, "children": [{"code": "ENERGY-NUCLEAR-LARGE", "name": "대형 원전", "level": 3, "tier": 1, "score": 57, "rank": 5, "delta": 0, "tag": "📈", "active_stocks": ["034020", "064350"], "sc_theme": 48, "sc_stock": 100, "sc_supply": 0, "value": 57}, {"code": "ENERGY-NUCLEAR-SMR", "name": "SMR 소형모듈원자로", "level": 3, "tier": 1, "score": 19, "rank": 64, "delta": 0, "tag": "📉", "active_stocks": ["034020"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "ENERGY-NUCLEAR-SUBMARINE", "name": "핵잠수함·해양원전", "level": 3, "tier": 1, "score": 21, "rank": 49, "delta": 0, "tag": "📊", "active_stocks": ["042660", "329180"], "sc_theme": 46, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "ENERGY-NUCLEAR-FUSION", "name": "핵융합", "level": 3, "tier": 2, "score": 19, "rank": 61, "delta": 0, "tag": "📉", "active_stocks": ["034020"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "ENERGY-NUCLEAR-DECOM", "name": "원전 해체", "level": 3, "tier": 2, "score": 19, "rank": 66, "delta": 0, "tag": "📉", "active_stocks": ["034020"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}]}, {"code": "ENERGY-H2", "name": "수소", "level": 2, "children": [{"code": "ENERGY-H2-LIQUID", "name": "액화수소", "level": 3, "tier": 2, "score": 9, "rank": 110, "delta": 0, "tag": "📉", "active_stocks": ["267250"], "sc_theme": 20, "sc_stock": 0, "sc_supply": 0, "value": 9}, {"code": "ENERGY-H2-GREEN", "name": "그린수소", "level": 3, "tier": 2, "score": 19, "rank": 63, "delta": 0, "tag": "📉", "active_stocks": ["034020", "047050"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "ENERGY-H2-FUELCELL", "name": "수소연료전지", "level": 3, "tier": 2, "score": 18, "rank": 71, "delta": 0, "tag": "📉", "active_stocks": ["005380", "336260"], "sc_theme": 40, "sc_stock": 0, "sc_supply": 0, "value": 18}]}, {"code": "ENERGY-RENEW", "name": "신재생", "level": 2, "children": [{"code": "ENERGY-RENEW-OFFWIND", "name": "해상풍력", "level": 3, "tier": 2, "score": 55, "rank": 7, "delta": 0, "tag": "📈", "active_stocks": ["000720", "100840"], "sc_theme": 46, "sc_stock": 97, "sc_supply": 0, "value": 55}, {"code": "ENERGY-RENEW-SOLAR", "name": "태양광", "level": 3, "tier": 2, "score": 38, "rank": 22, "delta": 0, "tag": "📊", "active_stocks": ["009830"], "sc_theme": 25, "sc_stock": 75, "sc_supply": 0, "value": 38}, {"code": "ENERGY-RENEW-PEROV", "name": "페로브스카이트 태양전지", "level": 3, "tier": 2, "score": 9, "rank": 111, "delta": 0, "tag": "📉", "active_stocks": ["009830", "078600"], "sc_theme": 21, "sc_stock": 0, "sc_supply": 0, "value": 9}]}, {"code": "ENERGY-POWER", "name": "전력망 (세분화)", "level": 2, "children": [{"code": "ENERGY-POWER-TRANSFORMER-HV", "name": "초고압 변압기 (345/500/765kV)", "level": 3, "tier": 1, "score": 50, "rank": 13, "delta": 0, "tag": "📈", "active_stocks": ["033100", "103590", "267260", "298040"], "sc_theme": 41, "sc_stock": 90, "sc_supply": 0, "value": 50}, {"code": "ENERGY-POWER-TRANSFORMER-DIST", "name": "배전/저압 변압기", "level": 3, "tier": 1, "score": 18, "rank": 69, "delta": 0, "tag": "📉", "active_stocks": ["010120", "062040", "189860"], "sc_theme": 40, "sc_stock": 0, "sc_supply": 0, "value": 18}, {"code": "ENERGY-POWER-CABLE-HV", "name": "초고압 전선·해저케이블", "level": 3, "tier": 1, "score": 20, "rank": 51, "delta": 0, "tag": "📊", "active_stocks": ["000500", "001440", "006260", "006340", "024840", "229640"], "sc_theme": 45, "sc_stock": 0, "sc_supply": 0, "value": 20}, {"code": "ENERGY-POWER-SWITCHGEAR", "name": "GIS·차단기·배전반", "level": 3, "tier": 1, "score": 18, "rank": 74, "delta": 0, "tag": "📉", "active_stocks": ["010120", "103590", "298040"], "sc_theme": 39, "sc_stock": 0, "sc_supply": 0, "value": 18}, {"code": "ENERGY-POWER-ESS-GRID", "name": "ESS·BESS 전력저장", "level": 3, "tier": 1, "score": 21, "rank": 48, "delta": 0, "tag": "📊", "active_stocks": ["006400", "066970", "107640", "267260", "373220"], "sc_theme": 46, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "ENERGY-POWER-SOLUTION", "name": "전력솔루션·STATCOM·HVDC", "level": 3, "tier": 2, "score": 18, "rank": 70, "delta": 0, "tag": "📉", "active_stocks": ["010120", "267260", "298040"], "sc_theme": 41, "sc_stock": 0, "sc_supply": 0, "value": 18}]}, {"code": "ENERGY-OIL", "name": "석유·가스", "level": 2, "children": [{"code": "ENERGY-OIL-REFINER-DOMESTIC", "name": "국내 정유 (재고평가+정제마진)", "level": 3, "tier": 1, "score": 13, "rank": 96, "delta": 0, "tag": "📉", "active_stocks": ["010950", "096770", "267250"], "sc_theme": 29, "sc_stock": 0, "sc_supply": 0, "value": 13}, {"code": "ENERGY-OIL-DISTRIB-SMALL", "name": "석유 유통 중소형 (투기테마)", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "ENERGY-OIL-GAS-LNG", "name": "LNG·가스 유통", "level": 3, "tier": 2, "score": 28, "rank": 31, "delta": 0, "tag": "📊", "active_stocks": [], "sc_theme": 10, "sc_stock": 68, "sc_supply": 0, "value": 28}]}, {"code": "ENERGY-CCUS", "name": "탄소포집", "level": 2, "children": [{"code": "ENERGY-CCUS-MAIN", "name": "CCUS/DAC", "level": 3, "tier": 2, "score": 22, "rank": 40, "delta": 0, "tag": "📊", "active_stocks": ["034020", "329180"], "sc_theme": 49, "sc_stock": 0, "sc_supply": 0, "value": 22}]}]}, {"code": "MAT", "name": "소재·화학", "level": 1, "children": [{"code": "MAT-STEEL", "name": "철강", "level": 2, "children": [{"code": "MAT-STEEL-MAJOR", "name": "대형 철강 (POSCO/현대제철)", "level": 3, "tier": 1, "score": 14, "rank": 91, "delta": 0, "tag": "📉", "active_stocks": ["004020", "005490"], "sc_theme": 31, "sc_stock": 0, "sc_supply": 0, "value": 14}, {"code": "MAT-STEEL-SPECIAL", "name": "특수강·방산강", "level": 3, "tier": 2, "score": 9, "rank": 107, "delta": 0, "tag": "📉", "active_stocks": ["001430", "003030", "103140"], "sc_theme": 20, "sc_stock": 0, "sc_supply": 0, "value": 9}]}, {"code": "MAT-NONFE", "name": "비철금속", "level": 2, "children": [{"code": "MAT-NONFE-COPPER", "name": "구리 (AI 전력 수요)", "level": 3, "tier": 1, "score": 12, "rank": 99, "delta": 0, "tag": "📉", "active_stocks": ["004000", "006260"], "sc_theme": 27, "sc_stock": 0, "sc_supply": 0, "value": 12}, {"code": "MAT-NONFE-GOLD", "name": "금 (사상 최고 랠리)", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "MAT-NONFE-RARE", "name": "희토류·특수광물", "level": 3, "tier": 2, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "MAT-NONFE-TUNGSTEN", "name": "텅스텐·몰리브덴", "level": 3, "tier": 2, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "MAT-CHEM", "name": "화학", "level": 2, "children": [{"code": "MAT-CHEM-BASIC", "name": "기초화학 (에틸렌/NCC)", "level": 3, "tier": 2, "score": 15, "rank": 87, "delta": 0, "tag": "📉", "active_stocks": ["002380", "005420", "051910"], "sc_theme": 34, "sc_stock": 0, "sc_supply": 0, "value": 15}, {"code": "MAT-CHEM-SPECIALTY", "name": "정밀·특수화학", "level": 3, "tier": 2, "score": 3, "rank": 126, "delta": 0, "tag": "📉", "active_stocks": ["011780"], "sc_theme": 6, "sc_stock": 0, "sc_supply": 0, "value": 3}]}]}, {"code": "INDUST", "name": "산업재", "level": 1, "children": [{"code": "INDUST-SHIP", "name": "조선", "level": 2, "children": [{"code": "INDUST-SHIP-LNG", "name": "LNG선 (친환경)", "level": 3, "tier": 1, "score": 23, "rank": 36, "delta": 0, "tag": "📊", "active_stocks": ["009540", "010140", "042660", "329180"], "sc_theme": 51, "sc_stock": 0, "sc_supply": 0, "value": 23}, {"code": "INDUST-SHIP-WARSHIP", "name": "함정·잠수함 (조선·방산 교차)", "level": 3, "tier": 1, "score": 22, "rank": 42, "delta": 0, "tag": "📊", "active_stocks": ["010140", "042660", "329180"], "sc_theme": 48, "sc_stock": 0, "sc_supply": 0, "value": 22}, {"code": "INDUST-SHIP-OFFSHORE", "name": "해양플랜트·FPSO", "level": 3, "tier": 2, "score": 22, "rank": 41, "delta": 0, "tag": "📊", "active_stocks": ["010140", "042660", "329180"], "sc_theme": 48, "sc_stock": 0, "sc_supply": 0, "value": 22}, {"code": "INDUST-SHIP-EQUIP", "name": "조선 기자재", "level": 3, "tier": 2, "score": 15, "rank": 86, "delta": 0, "tag": "📉", "active_stocks": ["014620", "082740", "100090", "100840", "443060"], "sc_theme": 34, "sc_stock": 0, "sc_supply": 0, "value": 15}]}, {"code": "INDUST-DEFENSE", "name": "방산 (9 세분화)", "level": 2, "children": [{"code": "INDUST-DEFENSE-GUIDED", "name": "유도무기·미사일 (천궁/현궁/비궁/L-SAM)", "level": 3, "tier": 1, "score": 15, "rank": 85, "delta": 0, "tag": "📉", "active_stocks": ["010820", "012450", "079550", "214430", "272210"], "sc_theme": 34, "sc_stock": 0, "sc_supply": 0, "value": 15}, {"code": "INDUST-DEFENSE-ARTILLERY", "name": "화포·자주포·다연장 (K9/천무)", "level": 3, "tier": 1, "score": 14, "rank": 90, "delta": 0, "tag": "📉", "active_stocks": ["012450", "103140"], "sc_theme": 30, "sc_stock": 0, "sc_supply": 0, "value": 14}, {"code": "INDUST-DEFENSE-ARMOR", "name": "전차·장갑차 (K2/레드백)", "level": 3, "tier": 1, "score": 16, "rank": 81, "delta": 0, "tag": "📉", "active_stocks": ["000270", "012450", "064350"], "sc_theme": 35, "sc_stock": 0, "sc_supply": 0, "value": 16}, {"code": "INDUST-DEFENSE-AIRCRAFT", "name": "군용기·전투기 (KF-21/FA-50)", "level": 3, "tier": 1, "score": 17, "rank": 77, "delta": 0, "tag": "📉", "active_stocks": ["012450", "047810", "272210"], "sc_theme": 37, "sc_stock": 0, "sc_supply": 0, "value": 17}, {"code": "INDUST-DEFENSE-AMMO", "name": "탄약·화약·장약", "level": 3, "tier": 2, "score": 14, "rank": 89, "delta": 0, "tag": "📉", "active_stocks": ["012450", "103140"], "sc_theme": 30, "sc_stock": 0, "sc_supply": 0, "value": 14}, {"code": "INDUST-DEFENSE-ELEC", "name": "방산 전자·레이더·전자전", "level": 3, "tier": 1, "score": 12, "rank": 98, "delta": 0, "tag": "📉", "active_stocks": ["079550", "214430", "272210"], "sc_theme": 27, "sc_stock": 0, "sc_supply": 0, "value": 12}, {"code": "INDUST-DEFENSE-DRONE", "name": "드론·무인체계", "level": 3, "tier": 2, "score": 20, "rank": 50, "delta": 0, "tag": "📊", "active_stocks": ["010820", "047810", "079550", "177350", "306620"], "sc_theme": 45, "sc_stock": 0, "sc_supply": 0, "value": 20}, {"code": "INDUST-DEFENSE-NAVAL-WEAPON", "name": "함정무장·수중감시", "level": 3, "tier": 2, "score": 20, "rank": 52, "delta": 0, "tag": "📊", "active_stocks": ["042660", "079550", "100090", "272210"], "sc_theme": 44, "sc_stock": 0, "sc_supply": 0, "value": 20}, {"code": "INDUST-DEFENSE-KEXPORT", "name": "K-방산 수출 허브 (크로스)", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "INDUST-SPACE", "name": "우주·항공우주", "level": 2, "children": [{"code": "INDUST-SPACE-LAUNCH", "name": "발사체·로켓", "level": 3, "tier": 2, "score": 17, "rank": 78, "delta": 0, "tag": "📉", "active_stocks": ["012450", "047810"], "sc_theme": 37, "sc_stock": 0, "sc_supply": 0, "value": 17}, {"code": "INDUST-SPACE-SATCOM", "name": "위성통신·저궤도", "level": 3, "tier": 1, "score": 16, "rank": 82, "delta": 0, "tag": "📉", "active_stocks": ["047810", "079550"], "sc_theme": 35, "sc_stock": 0, "sc_supply": 0, "value": 16}, {"code": "INDUST-SPACE-SPACEX", "name": "SpaceX 생태계", "level": 3, "tier": 2, "score": 4, "rank": 124, "delta": 0, "tag": "📉", "active_stocks": ["085910"], "sc_theme": 9, "sc_stock": 0, "sc_supply": 0, "value": 4}]}, {"code": "INDUST-AVIATION", "name": "항공기 (민항)", "level": 2, "children": [{"code": "INDUST-AVIATION-PARTS", "name": "민항기 부품 (보잉·에어버스)", "level": 3, "tier": 2, "score": 11, "rank": 101, "delta": 0, "tag": "📉", "active_stocks": ["047810"], "sc_theme": 25, "sc_stock": 0, "sc_supply": 0, "value": 11}]}, {"code": "INDUST-SECURITY", "name": "보안", "level": 2, "children": [{"code": "INDUST-SECURITY-CYBER", "name": "사이버보안 (SKT 해킹 계보)", "level": 3, "tier": 1, "score": 6, "rank": 117, "delta": 0, "tag": "📉", "active_stocks": ["131090", "203650"], "sc_theme": 14, "sc_stock": 0, "sc_supply": 0, "value": 6}, {"code": "INDUST-SECURITY-PHYSICAL", "name": "물리보안", "level": 3, "tier": 3, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "INDUST-MACHINERY", "name": "기계·자동화", "level": 2, "children": [{"code": "INDUST-MACHINERY-COOLING", "name": "액체냉각 (AI DC용)", "level": 3, "tier": 2, "score": 1, "rank": 129, "delta": 0, "tag": "📉", "active_stocks": ["107640"], "sc_theme": 3, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "INDUST-MACHINERY-SMARTFACTORY", "name": "스마트팩토리", "level": 3, "tier": 2, "score": 19, "rank": 57, "delta": 0, "tag": "📉", "active_stocks": ["066570", "098460"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "INDUST-MACHINERY-HEATPUMP", "name": "히트펌프", "level": 3, "tier": 3, "score": 20, "rank": 53, "delta": 0, "tag": "📊", "active_stocks": ["004000", "009450", "066570"], "sc_theme": 45, "sc_stock": 0, "sc_supply": 0, "value": 20}]}, {"code": "INDUST-ROBOT", "name": "로봇 (8 세분화)", "level": 2, "children": [{"code": "INDUST-ROBOT-HUMANOID", "name": "휴머노이드 완성품", "level": 3, "tier": 1, "score": 52, "rank": 11, "delta": 0, "tag": "📈", "active_stocks": ["005380", "066570", "277810", "306620", "454910"], "sc_theme": 59, "sc_stock": 73, "sc_supply": 0, "value": 52}, {"code": "INDUST-ROBOT-COLLAB", "name": "협동로봇", "level": 3, "tier": 1, "score": 49, "rank": 14, "delta": 0, "tag": "📈", "active_stocks": ["277810", "348340", "388720", "454910"], "sc_theme": 37, "sc_stock": 92, "sc_supply": 0, "value": 49}, {"code": "INDUST-ROBOT-SERVICE", "name": "서비스·배달·안내 로봇", "level": 3, "tier": 2, "score": 19, "rank": 58, "delta": 0, "tag": "📉", "active_stocks": ["090710", "108490", "466100"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "INDUST-ROBOT-LOGISTICS", "name": "물류·AMR 로봇", "level": 3, "tier": 2, "score": 11, "rank": 102, "delta": 0, "tag": "📉", "active_stocks": ["058610", "090360"], "sc_theme": 25, "sc_stock": 0, "sc_supply": 0, "value": 11}, {"code": "INDUST-ROBOT-ACTUATOR", "name": "액추에이터 (모터+감속기+제어)", "level": 3, "tier": 1, "score": 26, "rank": 34, "delta": 0, "tag": "📊", "active_stocks": ["012200", "012330", "066570", "090360", "108490", "204320"], "sc_theme": 57, "sc_stock": 0, "sc_supply": 0, "value": 26}, {"code": "INDUST-ROBOT-REDUCER", "name": "정밀 감속기", "level": 3, "tier": 1, "score": 13, "rank": 97, "delta": 0, "tag": "📉", "active_stocks": ["0004V0", "058610", "059270", "389500"], "sc_theme": 29, "sc_stock": 0, "sc_supply": 0, "value": 13}, {"code": "INDUST-ROBOT-COMPONENT", "name": "기타 부품 (센서/베어링/HAND)", "level": 3, "tier": 2, "score": 21, "rank": 43, "delta": 0, "tag": "📊", "active_stocks": ["006400", "098460", "373220"], "sc_theme": 47, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "INDUST-ROBOT-SW", "name": "로봇 SW·플랫폼", "level": 3, "tier": 2, "score": 1, "rank": 128, "delta": 0, "tag": "📉", "active_stocks": ["304100", "466100"], "sc_theme": 3, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "INDUST-CONST", "name": "건설", "level": 2, "children": [{"code": "INDUST-CONST-DOMESTIC", "name": "국내 주택·SOC", "level": 3, "tier": 2, "score": 20, "rank": 55, "delta": 0, "tag": "📊", "active_stocks": ["000720", "006360", "047040", "375500"], "sc_theme": 44, "sc_stock": 0, "sc_supply": 0, "value": 20}, {"code": "INDUST-CONST-OVERSEAS", "name": "해외 플랜트·중동 수주", "level": 3, "tier": 1, "score": 21, "rank": 47, "delta": 0, "tag": "📊", "active_stocks": ["000720", "003030", "028050"], "sc_theme": 47, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "INDUST-CONST-MATERIAL", "name": "시멘트·건자재", "level": 3, "tier": 3, "score": 5, "rank": 120, "delta": 0, "tag": "📉", "active_stocks": ["002380"], "sc_theme": 11, "sc_stock": 0, "sc_supply": 0, "value": 5}]}, {"code": "INDUST-TRANSPORT", "name": "운송 (세분화)", "level": 2, "children": [{"code": "INDUST-TRANSPORT-AIRLINE", "name": "항공사·여객", "level": 3, "tier": 2, "score": 9, "rank": 109, "delta": 0, "tag": "📉", "active_stocks": ["003490", "020560"], "sc_theme": 19, "sc_stock": 0, "sc_supply": 0, "value": 9}, {"code": "INDUST-TRANSPORT-TANKER", "name": "유조선·VLCC 탱커", "level": 3, "tier": 1, "score": 9, "rank": 113, "delta": 0, "tag": "📉", "active_stocks": ["003280", "005880", "028670"], "sc_theme": 21, "sc_stock": 0, "sc_supply": 0, "value": 9}, {"code": "INDUST-TRANSPORT-CONTAINER", "name": "컨테이너선", "level": 3, "tier": 1, "score": 11, "rank": 103, "delta": 0, "tag": "📉", "active_stocks": ["002030", "011200"], "sc_theme": 24, "sc_stock": 0, "sc_supply": 0, "value": 11}, {"code": "INDUST-TRANSPORT-BULKER", "name": "벌크선 (BDI 연동)", "level": 3, "tier": 2, "score": 9, "rank": 114, "delta": 0, "tag": "📉", "active_stocks": ["005880", "028670"], "sc_theme": 21, "sc_stock": 0, "sc_supply": 0, "value": 9}, {"code": "INDUST-TRANSPORT-LPGLNG", "name": "LPG·LNG 운반선", "level": 3, "tier": 2, "score": 4, "rank": 125, "delta": 0, "tag": "📉", "active_stocks": ["017960", "086280"], "sc_theme": 9, "sc_stock": 0, "sc_supply": 0, "value": 4}]}, {"code": "INDUST-TRADING", "name": "종합상사", "level": 2, "children": [{"code": "INDUST-TRADING-MENA", "name": "중동·신흥국 상사", "level": 3, "tier": 2, "score": 9, "rank": 108, "delta": 0, "tag": "📉", "active_stocks": ["047050", "267250"], "sc_theme": 20, "sc_stock": 0, "sc_supply": 0, "value": 9}]}]}, {"code": "CONS", "name": "소비재", "level": 1, "children": [{"code": "CONS-FOOD", "name": "식음료", "level": 2, "children": [{"code": "CONS-FOOD-KEXPORT", "name": "K-푸드 수출 (라면·김치)", "level": 3, "tier": 1, "score": 14, "rank": 92, "delta": 0, "tag": "📉", "active_stocks": ["001680", "003230", "004370", "007310", "017810", "271560"], "sc_theme": 31, "sc_stock": 0, "sc_supply": 0, "value": 14}, {"code": "CONS-FOOD-LIVESTOCK", "name": "축산·사료", "level": 3, "tier": 3, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "CONS-COSME", "name": "화장품", "level": 2, "children": [{"code": "CONS-COSME-KBEAUTY", "name": "K-뷰티 수출", "level": 3, "tier": 1, "score": 54, "rank": 8, "delta": 0, "tag": "📈", "active_stocks": ["090430", "161890", "257720", "378800"], "sc_theme": 49, "sc_stock": 92, "sc_supply": 0, "value": 54}, {"code": "CONS-COSME-MEDICAL", "name": "홈케어 미용기기·더마 코스메틱 (병원 밖)", "level": 3, "tier": 2, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "CONS-APPAREL", "name": "의류·패션", "level": 2, "children": [{"code": "CONS-APPAREL-GOLF", "name": "골프·레저웨어", "level": 3, "tier": 3, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "CONS-LEISURE", "name": "레저·관광", "level": 2, "children": [{"code": "CONS-LEISURE-INBOUND", "name": "인바운드 관광·면세", "level": 3, "tier": 2, "score": 21, "rank": 46, "delta": 0, "tag": "📊", "active_stocks": ["004170", "034230", "069960", "114090"], "sc_theme": 47, "sc_stock": 0, "sc_supply": 0, "value": 21}]}, {"code": "CONS-RETAIL", "name": "유통", "level": 2, "children": [{"code": "CONS-RETAIL-ECOMMERCE", "name": "이커머스", "level": 3, "tier": 2, "score": 10, "rank": 106, "delta": 0, "tag": "📉", "active_stocks": ["023530", "035420", "139480"], "sc_theme": 23, "sc_stock": 0, "sc_supply": 0, "value": 10}]}]}, {"code": "HEALTH", "name": "헬스케어", "level": 1, "children": [{"code": "HEALTH-PHARMA", "name": "제약", "level": 2, "children": [{"code": "HEALTH-PHARMA-TRAD", "name": "전통 제약", "level": 3, "tier": 3, "score": 45, "rank": 19, "delta": 0, "tag": "📈", "active_stocks": ["000100", "069620", "128940"], "sc_theme": 36, "sc_stock": 83, "sc_supply": 0, "value": 45}, {"code": "HEALTH-PHARMA-INCRETIN", "name": "GLP-1 비만치료제", "level": 3, "tier": 1, "score": 53, "rank": 10, "delta": 0, "tag": "📈", "active_stocks": ["087010", "128940", "347860", "389470"], "sc_theme": 41, "sc_stock": 100, "sc_supply": 0, "value": 53}, {"code": "HEALTH-PHARMA-LAI", "name": "장기지속형 제형 (LAI 4대 플랫폼)", "level": 3, "tier": 1, "score": 17, "rank": 76, "delta": 0, "tag": "📉", "active_stocks": ["087010", "128940", "389470"], "sc_theme": 37, "sc_stock": 0, "sc_supply": 0, "value": 17}]}, {"code": "HEALTH-BIO", "name": "바이오 (대폭 확장)", "level": 2, "children": [{"code": "HEALTH-BIO-CDMO", "name": "CDMO (삼바·셀트리온 양강)", "level": 3, "tier": 1, "score": 21, "rank": 44, "delta": 0, "tag": "📊", "active_stocks": ["053030", "068270", "207940", "237690", "950170"], "sc_theme": 47, "sc_stock": 0, "sc_supply": 0, "value": 21}, {"code": "HEALTH-BIO-ADC", "name": "ADC 항체약물접합체", "level": 3, "tier": 1, "score": 63, "rank": 2, "delta": 0, "tag": "📈", "active_stocks": ["068270", "141080", "196170", "298380", "314130"], "sc_theme": 63, "sc_stock": 100, "sc_supply": 0, "value": 63}, {"code": "HEALTH-BIO-DAC-TPD", "name": "DAC·표적단백질분해", "level": 3, "tier": 2, "score": 19, "rank": 59, "delta": 0, "tag": "📉", "active_stocks": ["141080", "298380"], "sc_theme": 42, "sc_stock": 0, "sc_supply": 0, "value": 19}, {"code": "HEALTH-BIO-BISPECIFIC", "name": "이중항체", "level": 3, "tier": 2, "score": 18, "rank": 67, "delta": 0, "tag": "📉", "active_stocks": ["128940", "174900", "298380", "338840"], "sc_theme": 40, "sc_stock": 0, "sc_supply": 0, "value": 18}, {"code": "HEALTH-BIO-BIOSIMILAR", "name": "바이오시밀러", "level": 3, "tier": 1, "score": 57, "rank": 4, "delta": 0, "tag": "📈", "active_stocks": ["068270", "196170", "950220"], "sc_theme": 49, "sc_stock": 100, "sc_supply": 0, "value": 57}, {"code": "HEALTH-BIO-TECHEXPORT", "name": "기술이전 플랫폼 (K-바이오 21조)", "level": 3, "tier": 1, "score": 58, "rank": 3, "delta": 0, "tag": "📈", "active_stocks": ["087010", "128940", "141080", "196170", "298380"], "sc_theme": 51, "sc_stock": 100, "sc_supply": 0, "value": 58}, {"code": "HEALTH-BIO-RNA", "name": "mRNA·RNA 치료제", "level": 3, "tier": 2, "score": 47, "rank": 16, "delta": 0, "tag": "📈", "active_stocks": ["237690", "950170"], "sc_theme": 37, "sc_stock": 88, "sc_supply": 0, "value": 47}, {"code": "HEALTH-BIO-NK-IO", "name": "NK세포·면역항암", "level": 3, "tier": 2, "score": 46, "rank": 18, "delta": 0, "tag": "📈", "active_stocks": ["950200"], "sc_theme": 24, "sc_stock": 100, "sc_supply": 0, "value": 46}, {"code": "HEALTH-BIO-MICROBIOME", "name": "마이크로바이옴", "level": 3, "tier": 3, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "HEALTH-MEDDEV", "name": "의료기기", "level": 2, "children": [{"code": "HEALTH-MEDDEV-DENTAL", "name": "임플란트·치과", "level": 3, "tier": 2, "score": 1, "rank": 131, "delta": 0, "tag": "📉", "active_stocks": ["108860"], "sc_theme": 2, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "HEALTH-MEDDEV-DIAG", "name": "진단 (감염병·혈액)", "level": 3, "tier": 2, "score": 6, "rank": 119, "delta": 0, "tag": "📉", "active_stocks": ["084650", "096530"], "sc_theme": 13, "sc_stock": 0, "sc_supply": 0, "value": 6}, {"code": "HEALTH-MEDDEV-AESTHETICS", "name": "미용의료 (보툴리눔·필러·에스테틱 기기)", "level": 3, "tier": 1, "score": 48, "rank": 15, "delta": 0, "tag": "📈", "active_stocks": ["145020", "214150", "336570", "378800"], "sc_theme": 42, "sc_stock": 84, "sc_supply": 0, "value": 48}]}, {"code": "HEALTH-DIGITAL", "name": "디지털헬스", "level": 2, "children": [{"code": "HEALTH-DIGITAL-AI", "name": "의료AI (Lunit·Vuno)", "level": 3, "tier": 2, "score": 1, "rank": 132, "delta": 0, "tag": "📉", "active_stocks": ["328130"], "sc_theme": 3, "sc_stock": 0, "sc_supply": 0, "value": 2}]}]}, {"code": "FIN", "name": "금융", "level": 1, "children": [{"code": "FIN-BANK", "name": "은행·금융지주", "level": 2, "children": [{"code": "FIN-BANK-MAJOR", "name": "대형 은행", "level": 3, "tier": 1, "score": 19, "rank": 60, "delta": 0, "tag": "📉", "active_stocks": ["055550", "086790", "105560", "316140"], "sc_theme": 43, "sc_stock": 0, "sc_supply": 0, "value": 19}]}, {"code": "FIN-SECURITIES", "name": "증권", "level": 2, "children": [{"code": "FIN-SECURITIES-MAJOR", "name": "대형 증권사", "level": 3, "tier": 2, "score": 18, "rank": 72, "delta": 0, "tag": "📉", "active_stocks": ["003470", "003530", "005940", "006800", "016360", "039490"], "sc_theme": 41, "sc_stock": 0, "sc_supply": 0, "value": 18}]}, {"code": "FIN-INSURANCE", "name": "보험", "level": 2, "children": [{"code": "FIN-INSURANCE-LIFE", "name": "생명보험", "level": 3, "tier": 3, "score": 22, "rank": 37, "delta": 0, "tag": "📊", "active_stocks": ["032830", "085620", "088350"], "sc_theme": 48, "sc_stock": 0, "sc_supply": 0, "value": 22}, {"code": "FIN-INSURANCE-NONLIFE", "name": "손해보험", "level": 3, "tier": 2, "score": 9, "rank": 112, "delta": 0, "tag": "📉", "active_stocks": ["000810", "138040"], "sc_theme": 21, "sc_stock": 0, "sc_supply": 0, "value": 9}]}, {"code": "FIN-HOLDING", "name": "지주사", "level": 2, "children": [{"code": "FIN-HOLDING-VALUEUP", "name": "지주사 밸류업·할인 축소", "level": 3, "tier": 1, "score": 27, "rank": 33, "delta": 0, "tag": "📊", "active_stocks": ["003550", "005930", "028260", "034730", "096770"], "sc_theme": 61, "sc_stock": 0, "sc_supply": 0, "value": 27}, {"code": "FIN-HOLDING-RESTRUCTURE", "name": "지주사 개편·인적분할", "level": 3, "tier": 1, "score": 18, "rank": 68, "delta": 0, "tag": "📉", "active_stocks": ["003550", "034730", "267250"], "sc_theme": 39, "sc_stock": 0, "sc_supply": 0, "value": 18}]}, {"code": "FIN-DIGITAL", "name": "디지털자산 (신규)", "level": 2, "children": [{"code": "FIN-DIGITAL-STABLECOIN", "name": "원화 스테이블코인 발행·허브", "level": 3, "tier": 1, "score": 4, "rank": 122, "delta": 0, "tag": "📉", "active_stocks": ["060250", "323410", "377300"], "sc_theme": 10, "sc_stock": 0, "sc_supply": 0, "value": 4}, {"code": "FIN-DIGITAL-PG-PAY", "name": "PG·결제 인프라", "level": 3, "tier": 1, "score": 3, "rank": 127, "delta": 0, "tag": "📉", "active_stocks": ["039290", "060250"], "sc_theme": 7, "sc_stock": 0, "sc_supply": 0, "value": 3}, {"code": "FIN-DIGITAL-BLOCKCHAIN-ENT", "name": "엔터프라이즈 블록체인·메인넷", "level": 3, "tier": 2, "score": 16, "rank": 83, "delta": 0, "tag": "📉", "active_stocks": ["012510", "018260", "064400"], "sc_theme": 36, "sc_stock": 0, "sc_supply": 0, "value": 16}, {"code": "FIN-DIGITAL-EXCHANGE", "name": "가상자산 거래소·인프라", "level": 3, "tier": 2, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "FIN-DIGITAL-CBDC-STO", "name": "CBDC·STO·예금토큰", "level": 3, "tier": 2, "score": 17, "rank": 79, "delta": 0, "tag": "📉", "active_stocks": ["036530", "055550", "316140"], "sc_theme": 38, "sc_stock": 0, "sc_supply": 0, "value": 17}, {"code": "FIN-DIGITAL-SECURITY-AUTH", "name": "디지털자산 보안·인증", "level": 3, "tier": 2, "score": 7, "rank": 116, "delta": 0, "tag": "📉", "active_stocks": ["131090", "158430", "203650"], "sc_theme": 16, "sc_stock": 0, "sc_supply": 0, "value": 7}]}]}, {"code": "REAL", "name": "부동산·리츠", "level": 1, "children": [{"code": "REAL-REITS", "name": "리츠", "level": 2, "children": [{"code": "REAL-REITS-DC", "name": "데이터센터 REIT", "level": 3, "tier": 2, "score": 1, "rank": 133, "delta": 0, "tag": "📉", "active_stocks": ["365550"], "sc_theme": 3, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "REAL-REITS-OFFICE", "name": "오피스 REIT", "level": 3, "tier": 3, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}]}, {"code": "MACRO", "name": "매크로·크로스섹터", "level": 1, "children": [{"code": "MACRO-GEO", "name": "지정학 허브", "level": 2, "children": [{"code": "MACRO-GEO-RECONSTRUCTION", "name": "우크라·가자 재건 (크로스)", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "MACRO-GEO-HORMUZ-CRISIS", "name": "호르무즈 위기 (크로스)", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "MACRO-GEO-US-IRAN-WAR", "name": "미-이란 분쟁", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}, {"code": "MACRO-POLICY", "name": "정책 허브", "level": 2, "children": [{"code": "MACRO-POLICY-KOSPI5000", "name": "코스피 5000·자본시장 활성화", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}, {"code": "MACRO-POLICY-SANGBEOB", "name": "상법개정·지배구조 개혁", "level": 3, "tier": 1, "score": 0, "rank": null, "delta": 0, "tag": "", "active_stocks": [], "sc_theme": 0, "sc_stock": 0, "sc_supply": 0, "value": 2}]}]}], "_meta": {"total_l3": 151, "active_l3": 133}};
+const SN   = {"079550": "LIG넥스원", "012450": "한화에어로스페이스", "272210": "한화시스템", "010820": "퍼스텍", "214430": "아이쓰리시스템", "024740": "한일단조", "103140": "풍산", "003570": "SNT다이내믹스", "448490": "코츠테크놀로지", "064350": "현대로템", "000270": "기아", "075180": "삼양컴텍", "047810": "KAI", "221800": "하이즈항공", "253590": "샘코", "065450": "빅텍", "005870": "휴니드", "306620": "네온테크", "177350": "베셀", "042660": "한화오션", "100090": "삼강엠앤티", "207940": "삼성바이오로직스", "068270": "셀트리온", "950170": "롯데바이오로직스", "237690": "에스티팜", "053030": "바이넥스", "141080": "리가켐바이오", "196170": "알테오젠", "298380": "에이비엘바이오", "314130": "지놈앤컴퍼니", "470320": "인투셀", "950220": "프레스티지바이오파마", "170900": "동아에스티", "087010": "펩트론", "128940": "한미약품", "389470": "인벤티지랩", "347860": "디앤디파마텍", "338840": "와이바이오로직스", "174900": "앱클론", "328130": "루닛", "338220": "뷰노", "315640": "딥노이드", "376930": "노을", "277810": "레인보우로보틱스", "005380": "현대차", "454910": "두산로보틱스", "066570": "LG전자", "348340": "뉴로메카", "388720": "유일로보틱스", "090710": "휴림로봇", "466100": "클로봇", "108490": "로보티즈", "117730": "티로보틱스", "058610": "에스피지", "090360": "로보스타", "369370": "하이젠알앤엠", "437730": "삼현", "012330": "현대모비스", "204320": "HL만도", "212560": "네오오토", "389500": "에스비비테크", "004380": "삼익THK", "0004V0": "엔비알모션", "059270": "해성티피씨", "098460": "고영", "373220": "LG에너지솔루션", "006400": "삼성SDI", "115610": "이미지스", "019990": "일지테크", "304100": "솔트룩스", "010950": "S-Oil", "096770": "SK이노베이션", "078930": "GS", "267250": "HD현대", "024060": "흥구석유", "000440": "중앙에너비스", "003930": "한국ANKOR유전", "014530": "극동유화", "128820": "대성산업", "004090": "한국석유", "018670": "SK가스", "017940": "E1", "028670": "팬오션", "003280": "흥아해운", "005880": "대한해운", "011200": "HMM", "002030": "STX그린로지스", "044450": "KSS해운", "086280": "현대글로비스", "017960": "한국카본", "010130": "고려아연", "267260": "HD현대일렉트릭", "298040": "효성중공업", "103590": "일진전기", "033100": "제룡전기", "010120": "LS일렉트릭", "062040": "산일전기", "189860": "서전기전", "017040": "광명전기", "025530": "제룡산업", "006260": "LS", "001440": "대한전선", "229640": "LS에코에너지", "000500": "가온전선", "015860": "일진홀딩스", "042370": "비츠로시스", "066970": "엘앤에프", "107640": "한중엔시에스", "377300": "카카오페이", "323410": "카카오뱅크", "060250": "NHN KCP", "241840": "더즌", "234340": "헥토파이낸셜", "064260": "다날", "046440": "KG모빌리언스", "039290": "인포뱅크", "025770": "한국정보통신", "018260": "삼성에스디에스", "064400": "LG씨엔에스", "012510": "더존비즈온", "035510": "신세계I&C", "042000": "카페24", "030520": "한글과컴퓨터", "054920": "한컴위드", "112040": "위메이드", "201490": "미투온", "236200": "슈프리마", "006220": "제주은행", "036530": "한화투자증권", "316140": "우리금융지주", "055550": "신한지주", "203650": "드림시큐리티", "053300": "한국정보인증", "131090": "시큐브", "158430": "아톤", "053350": "이니텍", "000660": "SK하이닉스", "005930": "삼성전자", "042700": "한미반도체", "403870": "HPSP", "240810": "원익IPS", "241770": "피에스케이홀딩스", "005935": "삼성전자우", "095340": "ISC", "058470": "리노공업", "108120": "실리콘웍스", "377480": "가온칩스", "102460": "어보브반도체", "440730": "파두", "094360": "칩스앤미디어", "054450": "텔레칩스", "140860": "파크시스템스", "260930": "에스티아이", "036830": "솔브레인", "036490": "SK스페셜티", "104830": "원익머티리얼즈", "007660": "이수페타시스", "009150": "삼성전기", "000990": "DB하이텍", "036930": "주성엔지니어링", "034220": "LG디스플레이", "020150": "롯데에너지머티리얼즈", "011070": "LG이노텍", "035420": "NAVER", "035720": "카카오", "251270": "넷마블", "036570": "엔씨소프트", "293490": "카카오게임즈", "263750": "펄어비스", "225570": "넥슨게임즈", "017670": "SK텔레콤", "030200": "KT", "032640": "LG유플러스", "352820": "하이브", "041510": "에스엠", "035900": "JYP엔터", "122870": "와이지엔터", "253450": "스튜디오드래곤", "259960": "크래프톤", "018880": "한온시스템", "053210": "스카이문스테크놀로지", "051910": "LG화학", "247540": "에코프로비엠", "003670": "포스코퓨처엠", "078600": "대주전자재료", "365340": "성일하이텍", "034020": "두산에너빌리티", "052690": "한전기술", "011810": "STX엔진", "064820": "케이프", "329180": "HD현대중공업", "271940": "일진하이솔루스", "047050": "포스코인터내셔널", "336260": "두산퓨얼셀", "009830": "한화솔루션", "322000": "HD현대에너지솔루션", "000720": "현대건설", "036460": "한국가스공사", "100840": "S&TC", "005490": "POSCO홀딩스", "004020": "현대제철", "001430": "세아베스틸지주", "003030": "세아제강지주", "004000": "롯데정밀화학", "047400": "유니온머티리얼", "084870": "TBH글로벌", "011170": "롯데케미칼", "002380": "KCC", "005420": "코스모신소재", "011790": "SKC", "011780": "금호석유", "010140": "삼성중공업", "009540": "HD한국조선해양", "322180": "한화에어로스페이스", "053450": "세명전기공업", "085910": "아이에이", "053800": "안랩", "375500": "DL이앤씨", "006360": "GS건설", "047040": "대우건설", "028050": "삼성E&A", "003490": "대한항공", "020560": "아시아나항공", "003480": "한진칼", "079430": "현대리바트", "001040": "CJ", "003230": "삼양식품", "004370": "농심", "001680": "대상", "017810": "풀무원", "271560": "오리온", "007310": "오뚜기", "018620": "우리손에프앤지", "378800": "에이피알", "090430": "아모레퍼시픽", "257720": "실리콘투", "192820": "코스맥스", "161890": "한국콜마", "018250": "애경산업", "095660": "네오팜", "020000": "한섬", "011160": "F&F", "008770": "호텔신라", "034230": "파라다이스", "035250": "강원랜드", "114090": "GKL", "023530": "롯데쇼핑", "139480": "이마트", "282330": "BGF리테일", "000100": "유한양행", "069620": "대웅제약", "185750": "종근당", "950200": "지씨셀", "357250": "미코바이오메드", "263670": "지놈앤컴퍼니", "048260": "오스템임플란트", "043150": "덴티움", "108860": "덴티스", "137310": "SD바이오센서", "096530": "씨젠", "084650": "랩지노믹스", "109820": "진매트릭스", "145020": "휴젤", "214150": "클래시스", "336570": "원텍", "287310": "제이시스메디칼", "105560": "KB금융", "086790": "하나금융지주", "138930": "BNK금융지주", "175330": "JB금융지주", "071050": "한국금융지주", "006800": "미래에셋증권", "005940": "NH투자증권", "030210": "다올투자증권", "016360": "삼성증권", "032830": "삼성생명", "088350": "한화생명", "085620": "미래에셋생명", "000810": "삼성화재", "138040": "메리츠금융지주", "005830": "DB손해보험", "001450": "현대해상", "000370": "한화손해보험", "003550": "LG", "028260": "삼성물산", "096760": "SK스퀘어", "034730": "SK", "000880": "한화", "417790": "SK리츠", "365550": "ESR켄달스퀘어리츠", "330590": "롯데리츠", "432320": "KB스타리츠", "067080": "대정밀", "033240": "자화전자", "003410": "쌍용C&E", "003300": "한일시멘트", "009450": "경동나비엔", "012030": "에스원", "036040": "케이피엠테크", "082740": "한화엔진", "071970": "HD현대마린엔진", "443060": "HD현대마린솔루션", "014620": "성광벤드", "077970": "STX엔진", "006340": "대원전선", "024840": "KBI메탈", "039490": "키움증권", "003470": "유안타증권", "003530": "한화투자증권", "064290": "인텍플러스", "330860": "네패스아크", "039030": "이오테크닉스", "161580": "필옵틱스", "012200": "계양전기", "001230": "동국제강", "004170": "신세계", "069960": "현대백화점"};
+
+const HUE = {
+  EE:210, IT:270, COMM:172, AUTO:38, BAT:142,
+  ENERGY:24, MAT:198, INDUST:238, CONS:332,
+  HEALTH:158, FIN:47, REAL:22, MACRO:0
+};
+
+// ── helpers ────────────────────────────────────────────────
+function cellFill(score, l1) {
+  const h = HUE[l1] ?? 210;
+  if (!score) return `hsl(${h},9%,10%)`;
+  const t = Math.min(score / 68, 1);
+  return `hsl(${h},${(20+t*60).toFixed(0)}%,${(14+t*38).toFixed(0)}%)`;
+}
+function l1Of(node) {
+  if (node.depth === 1) return node.data.code;
+  if (node.depth === 2) return node.parent?.data.code;
+  return node.parent?.parent?.data.code;
+}
+function l1OfSector(node) {
+  // in sector view depth=1 is L2, depth=2 is L3 — l1 is stored via activeSector
+  return activeSector;
+}
+function truncate(str, px) {
+  const chars = Math.floor(px / 7.2);
+  return chars < 4 ? '' : str.length > chars ? str.slice(0, chars-1) + '…' : str;
+}
+
+const root = d3.hierarchy(DATA)
+  .sum(d => d.value || 0)
+  .sort((a,b) => (b.value||0)-(a.value||0));
+
+const svg     = d3.select('#treemap');
+const wrap    = document.getElementById('chart-wrap');
+const tooltip = document.getElementById('tooltip');
+let activeSector = null;
+
+// ── Overview render ────────────────────────────────────────
+function goOverview() {
+  activeSector = null;
+  document.getElementById('back-btn').style.display = 'none';
+  document.getElementById('h-breadcrumb').innerHTML = '';
+  document.getElementById('h-stat-l3').innerHTML  = _statL3Html  || document.getElementById('h-stat-l3').innerHTML;
+  document.getElementById('h-stat-top').innerHTML = _statTopHtml || document.getElementById('h-stat-top').innerHTML;
+  renderOverview();
+}
+
+function goSector(l1Code) {
+  const l1Data = DATA.children.find(c => c.code === l1Code);
+  if (!l1Data) return;
+  activeSector = l1Code;
+
+  document.getElementById('back-btn').style.display = 'flex';
+  document.getElementById('h-breadcrumb').innerHTML =
+    `<span style="margin:0 4px;color:var(--border)">›</span><b>${l1Data.name}</b>`;
+
+  // update stats for this sector
+  const leaves = l1Data.children.flatMap(l2 => l2.children||[]);
+  const active = leaves.filter(l=>l.score>0).length;
+  const top    = [...leaves].sort((a,b)=>b.score-a.score)[0];
+  document.getElementById('h-stat-l3').innerHTML =
+    `<b style="font-size:14px">${l1Data.name}</b> · Active <b>${active}</b> / ${leaves.length} L3`;
+  document.getElementById('h-stat-top').innerHTML = top && top.score > 0
+    ? `Top <b>${top.name}</b> <b style="color:var(--accent)">${top.score}</b>` : '';
+
+  renderSector(l1Data);
+}
+
+function renderOverview() {
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  svg.attr('width', W).attr('height', H).selectAll('*').remove();
+
+  d3.treemap()
+    .size([W, H])
+    .paddingOuter(5)
+    .paddingTop(d => d.depth===1 ? 19 : d.depth===2 ? 13 : 0)
+    .paddingInner(d => d.depth<=1 ? 3 : 1)
+    .round(true)(root);
+
+  const g = svg.append('g');
+  const l1s = root.children || [];
+
+  // L1 panels — clickable hit rect + fill rect
+  l1s.forEach(d => {
+    const l1g = g.append('g');
+    // fill (visual)
+    l1g.append('rect').attr('class','l1-bg-fill')
+      .attr('x',d.x0).attr('y',d.y0)
+      .attr('width',d.x1-d.x0).attr('height',d.y1-d.y0)
+      .attr('fill',`hsl(${HUE[d.data.code]??210},10%,7%)`).attr('rx',4);
+    // hit area
+    l1g.append('rect').attr('class','l1-bg-hit')
+      .attr('x',d.x0).attr('y',d.y0)
+      .attr('width',d.x1-d.x0).attr('height',Math.min(19,d.y1-d.y0))
+      .attr('fill','transparent')
+      .on('click', () => goSector(d.data.code));
+  });
+
+  // L1 labels + hint
+  g.selectAll('.l1-lbl').data(l1s).join('text').attr('class','l1-lbl')
+    .attr('x',d=>d.x0+5).attr('y',d=>d.y0+12)
+    .text(d => (d.x1-d.x0)>80 ? d.data.name : d.data.code)
+    .style('cursor','pointer')
+    .on('click', d => goSector(d.data.code));
+
+  g.selectAll('.l1-hint').data(l1s.filter(d=>(d.x1-d.x0)>120)).join('text')
+    .attr('class','l1-hint')
+    .attr('x',d=>d.x1-5).attr('y',d=>d.y0+11)
+    .attr('text-anchor','end')
+    .text('클릭하여 확대');
+
+  // L2 labels
+  const l2s = l1s.flatMap(n=>n.children||[]);
+  g.selectAll('.l2-lbl').data(l2s.filter(d=>(d.x1-d.x0)>36)).join('text')
+    .attr('class','l2-lbl')
+    .attr('x',d=>d.x0+4).attr('y',d=>d.y0+10)
+    .text(d=>truncate(d.data.name,d.x1-d.x0-8));
+
+  // L3 leaves
+  const W3=d=>Math.max(0,d.x1-d.x0), H3=d=>Math.max(0,d.y1-d.y0);
+  const cellG = g.selectAll('.l3-cell').data(root.leaves()).join('g')
+    .attr('class','l3-cell').attr('transform',d=>`translate(${d.x0},${d.y0})`);
+
+  cellG.append('rect').attr('class','fill')
+    .attr('width',W3).attr('height',H3)
+    .attr('fill',d=>cellFill(d.data.score,l1Of(d)))
+    .attr('rx',2).attr('stroke','transparent')
+    .on('mousemove',(ev,d)=>ttShow(ev,d,l1Of(d)))
+    .on('mouseleave',ttHide);
+
+  cellG.filter(d=>d.data.rank&&d.data.rank<=10).append('rect')
+    .attr('width',W3).attr('height',H3).attr('fill','none')
+    .attr('stroke','#e3b341').attr('stroke-width',1.5)
+    .attr('rx',2).attr('pointer-events','none');
+
+  cellG.filter(d=>W3(d)>46&&H3(d)>26).append('text').attr('class','l3-name')
+    .attr('x',5).attr('y',4).text(d=>truncate(d.data.name,W3(d)-10));
+
+  cellG.filter(d=>d.data.score>0&&W3(d)>38&&H3(d)>44).append('text').attr('class','l3-score')
+    .attr('x',d=>W3(d)/2).attr('y',d=>H3(d)/2+6)
+    .attr('text-anchor','middle').attr('dominant-baseline','middle').text(d=>d.data.score);
+
+  cellG.filter(d=>d.data.rank&&d.data.rank<=20&&W3(d)>30&&H3(d)>18).append('text')
+    .attr('class','l3-rank').attr('x',d=>W3(d)-4).attr('y',4)
+    .attr('text-anchor','end').attr('dominant-baseline','hanging').text(d=>`#${d.data.rank}`);
+}
+
+// ── Sector render ──────────────────────────────────────────
+function renderSector(l1Data) {
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  svg.attr('width',W).attr('height',H).selectAll('*').remove();
+
+  const l1Code = l1Data.code;
+  const h = HUE[l1Code] ?? 210;
+
+  // rebuild sub-hierarchy (L2 → L3)
+  const subRoot = d3.hierarchy({ name: l1Data.name, children: l1Data.children })
+    .sum(d => d.value || 0)
+    .sort((a,b) => (b.value||0)-(a.value||0));
+
+  d3.treemap()
+    .size([W, H])
+    .paddingOuter(6)
+    .paddingTop(d => d.depth===1 ? 24 : 0)
+    .paddingInner(d => d.depth===1 ? 4 : 2)
+    .round(true)(subRoot);
+
+  const g = svg.append('g');
+  const l2s = subRoot.children || [];
+
+  // L2 background
+  g.selectAll('.sv-l2-bg').data(l2s).join('rect').attr('class','sv-l2-bg')
+    .attr('x',d=>d.x0).attr('y',d=>d.y0)
+    .attr('width',d=>d.x1-d.x0).attr('height',d=>d.y1-d.y0)
+    .attr('fill',`hsl(${h},12%,8%)`).attr('rx',5);
+
+  // L2 labels
+  g.selectAll('.sv-l2-lbl').data(l2s).join('text').attr('class','sv-l2-lbl')
+    .attr('x',d=>d.x0+7).attr('y',d=>d.y0+15)
+    .text(d => {
+      const w = d.x1-d.x0;
+      return w < 80 ? d.data.name.slice(0,6) : d.data.name;
+    });
+
+  // L3 leaves
+  const W3=d=>Math.max(0,d.x1-d.x0), H3=d=>Math.max(0,d.y1-d.y0);
+  const cellG = g.selectAll('.l3-cell').data(subRoot.leaves()).join('g')
+    .attr('class','l3-cell').attr('transform',d=>`translate(${d.x0},${d.y0})`);
+
+  cellG.append('rect').attr('class','fill')
+    .attr('width',W3).attr('height',H3)
+    .attr('fill',d=>cellFill(d.data.score, l1Code))
+    .attr('rx',3).attr('stroke','transparent')
+    .on('mousemove',(ev,d)=>ttShow(ev,d,l1Code))
+    .on('mouseleave',ttHide);
+
+  // top-10 gold border
+  cellG.filter(d=>d.data.rank&&d.data.rank<=10).append('rect')
+    .attr('width',W3).attr('height',H3).attr('fill','none')
+    .attr('stroke','#e3b341').attr('stroke-width',2)
+    .attr('rx',3).attr('pointer-events','none');
+
+  // L3 name — larger text
+  cellG.filter(d=>W3(d)>50&&H3(d)>28).append('text').attr('class','sv-l3-name')
+    .attr('x',7).attr('y',6).text(d=>truncate(d.data.name,W3(d)-14));
+
+  // score — large center
+  cellG.filter(d=>d.data.score>0&&W3(d)>50&&H3(d)>55).append('text').attr('class','sv-l3-score')
+    .attr('x',d=>W3(d)/2).attr('y',d=>H3(d)/2+8)
+    .attr('text-anchor','middle').attr('dominant-baseline','middle')
+    .text(d=>d.data.score);
+
+  // rank badge
+  cellG.filter(d=>d.data.rank&&W3(d)>36&&H3(d)>22).append('text').attr('class','sv-l3-rank')
+    .attr('x',d=>W3(d)-5).attr('y',5)
+    .attr('text-anchor','end').attr('dominant-baseline','hanging').text(d=>`#${d.data.rank}`);
+
+  // inline stock chips for large cells
+  cellG.filter(d=>W3(d)>90&&H3(d)>80&&d.data.active_stocks.length>0).each(function(d) {
+    const cg = d3.select(this);
+    const chips = d.data.active_stocks.slice(0,3);
+    const yBase = H3(d) - 6 - chips.length * 13;
+    chips.forEach((code, i) => {
+      const nm = SN[code] || code;
+      cg.append('text').attr('class','sv-chip')
+        .attr('x', 7).attr('y', yBase + i * 13)
+        .text(nm.length > 7 ? nm.slice(0,7)+'…' : nm);
+    });
+  });
+}
+
+// ── Tooltip ───────────────────────────────────────────────
+function ttShow(ev, d, l1Override) {
+  const nd = d.data;
+  const l1 = l1Override ?? l1Of(d);
+  const h  = HUE[l1] ?? 210;
+  const col = `hsl(${h},65%,55%)`;
+
+  const delta = (() => {
+    if (!nd.delta) return `<span class="tt-nc">─</span>`;
+    return nd.delta>0
+      ? `<span class="tt-up">▲${nd.delta}</span>`
+      : `<span class="tt-dn">▼${Math.abs(nd.delta)}</span>`;
+  })();
+
+  const chips = nd.active_stocks.map(c=>
+    `<span class="chip">${SN[c]||c}</span>`).join('');
+
+  const scoreBlock = nd.score > 0 ? `
+    <div class="tt-score-row">
+      <span class="tt-score-val">${nd.score}</span>
+      <div class="tt-score-sub">
+        ${nd.rank ? `<span class="rank">#${nd.rank} 순위</span><br>` : ''}전일 대비 ${delta}
+      </div>
+    </div>
+    <div class="bar-row">
+      <span class="bar-lbl">테마빈도 45%</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${nd.sc_theme}%;background:${col}"></div></div>
+      <span class="bar-val">${nd.sc_theme}</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-lbl">종목등락 35%</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${nd.sc_stock}%;background:#79c0ff"></div></div>
+      <span class="bar-val">${nd.sc_stock}</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-lbl">수급 20%</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${nd.sc_supply}%;background:#3fb950"></div></div>
+      <span class="bar-val">${nd.sc_supply}</span>
+    </div>
+  ` : `<div class="tt-inactive">비활성 (score 0)</div>`;
+
+  tooltip.innerHTML = `
+    <div class="tt-name">${nd.name}</div>
+    <div class="tt-code">${nd.code}</div>
+    ${scoreBlock}
+    ${chips ? `<div class="tt-div"></div><div class="tt-chips-lbl">활성 종목</div><div class="chips">${chips}</div>` : ''}
+  `;
+
+  let x = ev.clientX+18, y = ev.clientY+10;
+  if (x+272 > window.innerWidth-8)  x = ev.clientX-282;
+  if (y+300 > window.innerHeight-8) y = ev.clientY-310;
+  tooltip.style.cssText += `;display:block;left:${x}px;top:${y}px`;
+}
+function ttHide() { tooltip.style.display='none'; }
+
+// ── Init ──────────────────────────────────────────────────
+// 전체 뷰 stats 원본 HTML 저장 — back 버튼 클릭 시 goOverview() 가 복원
+const _statL3Html  = document.getElementById('h-stat-l3').innerHTML;
+const _statTopHtml = document.getElementById('h-stat-top').innerHTML;
+
+renderOverview();
+window.addEventListener('resize', () => activeSector
+  ? renderSector(DATA.children.find(c=>c.code===activeSector))
+  : renderOverview());
+</script>
+</body>
+</html>
