@@ -542,9 +542,12 @@ function ttShow(ev, d, l1Override) {
     ${chips ? `<div class="tt-div"></div><div class="tt-chips-lbl">활성 종목</div><div class="chips">${chips}</div>` : ''}
   `;
 
+  const TW = 296, TH = 420;
   let x = ev.clientX+18, y = ev.clientY+10;
-  if (x+296 > window.innerWidth-8)  x = ev.clientX-306;
-  if (y+400 > window.innerHeight-8) y = ev.clientY-410;
+  if (x + TW > window.innerWidth  - 8) x = ev.clientX - TW - 8;
+  if (y + TH > window.innerHeight - 8) y = ev.clientY - TH - 10;
+  if (x < 8) x = 8;
+  if (y < 8) y = 8;
   tooltip.style.cssText += `;display:block;left:${x}px;top:${y}px`;
 }
 function ttHide() { tooltip.style.display='none'; }
