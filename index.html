@@ -151,6 +151,54 @@ html, body {
 .tt-us-row   { margin-bottom: 6px; }
 .tt-us-ticker { font-size:11px; font-weight:700; font-family:monospace; }
 .tt-us-via   { font-size:10px; color:var(--text-dim); line-height:1.5; margin-top:1px; }
+
+/* ── Mobile L1 card grid (B-mode) ── */
+#m-overview {
+  display: none;
+  padding: 10px 12px 28px;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.m-l1-card {
+  border-radius: 10px;
+  padding: 13px 13px 11px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: border-color .12s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-l1-card:active { transform: scale(.96); }
+.m-l1-name {
+  font-size: 13px; font-weight: 800; color: var(--text);
+  margin-bottom: 4px; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.m-l1-active { font-size: 10px; color: var(--text-dim); margin-bottom: 7px; }
+.m-l1-top-wrap { border-top: 1px solid rgba(255,255,255,.07); padding-top: 7px; }
+.m-l1-top-name {
+  font-size: 10px; color: var(--text-dim);
+  display: block; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.m-l1-top-score { font-size: 22px; font-weight: 900; line-height: 1; }
+
+@media (max-width: 767px) {
+  #header { padding: 0 12px; gap: 8px; }
+  .h-meta { display: none; }
+  .h-sep  { display: none; }
+  .h-stats { gap: 12px; font-size: 10px; }
+  .h-stats b { font-size: 12px; }
+  .h-top1 { display: none; }
+
+  #tab-bar { height: 44px; padding: 0 8px; gap: 1px; }
+  .tab-btn { font-size: 11px; padding: 5px 10px; min-height: 44px; }
+
+  #chart-wrap {
+    height: calc(100dvh - 50px - 44px);
+    overflow-y: auto;
+  }
+  #chart-wrap.sector-active { overflow: hidden; }
+}
 </style>
 </head>
 <body>
@@ -171,6 +219,7 @@ html, body {
 
 <div id="chart-wrap">
   <svg id="treemap"></svg>
+  <div id="m-overview"></div>
 </div>
 <div id="tooltip"></div>
 
@@ -240,6 +289,47 @@ function truncate(str, px) {
   return chars < 4 ? '' : str.length > chars ? str.slice(0, chars-1) + '…' : str;
 }
 
+const isMobile = () => window.innerWidth < 768;
+
+function renderMobileOverview() {
+  svg.style('display', 'none');
+  const mo = document.getElementById('m-overview');
+  mo.style.display = 'grid';
+  mo.innerHTML = '';
+
+  (DATA.children || []).forEach(l1 => {
+    const h      = HUE[l1.code] ?? 210;
+    const leaves = (l1.children || []).flatMap(l2 => l2.children || []);
+    const active = leaves.filter(l => l.score > 0).length;
+    const top    = [...leaves].sort((a, b) => b.score - a.score)[0];
+    const hasAct = active > 0;
+
+    const card = document.createElement('div');
+    card.className = 'm-l1-card';
+    card.style.background  = `hsl(${h},12%,9%)`;
+    card.style.borderColor = hasAct ? `hsl(${h},28%,22%)` : 'var(--border)';
+    card.style.opacity     = hasAct ? '1' : '0.45';
+    card.addEventListener('click',    () => goSector(l1.code));
+    card.addEventListener('touchend', (e) => { e.preventDefault(); goSector(l1.code); });
+
+    const topHtml = hasAct && top ? `
+      <div class="m-l1-top-wrap">
+        <span class="m-l1-top-name">${top.name}</span>
+        <span class="m-l1-top-score" style="color:hsl(${h},68%,58%)">${top.score}</span>
+      </div>` : `
+      <div class="m-l1-top-wrap" style="opacity:.4">
+        <span class="m-l1-top-name">비활성</span>
+      </div>`;
+
+    card.innerHTML = `
+      <div class="m-l1-name">${l1.name}</div>
+      <div class="m-l1-active">${active} / ${leaves.length} 활성</div>
+      ${topHtml}
+    `;
+    mo.appendChild(card);
+  });
+}
+
 const root = d3.hierarchy(DATA)
   .sum(d => d.value || 0)
   .sort((a,b) => (b.value||0)-(a.value||0));
@@ -259,13 +349,17 @@ function goOverview() {
   document.getElementById('h-breadcrumb').innerHTML = '';
   document.getElementById('h-stat-l3').innerHTML  = _statL3Html  || document.getElementById('h-stat-l3').innerHTML;
   document.getElementById('h-stat-top').innerHTML = _statTopHtml || document.getElementById('h-stat-top').innerHTML;
-  renderOverview();
+  document.getElementById('chart-wrap').classList.remove('sector-active');
+  if (isMobile()) { renderMobileOverview(); } else { renderOverview(); }
 }
 
 function goSector(l1Code) {
   ttHide();
   const l1Data = DATA.children.find(c => c.code === l1Code);
-  if (!l1Data) { renderOverview(); setTabActive(null); return; }
+  if (!l1Data) { goOverview(); return; }
+  document.getElementById('m-overview').style.display = 'none';
+  svg.style('display', 'block');
+  document.getElementById('chart-wrap').classList.add('sector-active');
   activeSector = l1Code;
 
   const slug = HASH_MAP[l1Code];
@@ -582,6 +676,9 @@ const _initHash = location.hash.slice(1);
 const _initL1   = HASH_TO_L1[_initHash];
 if (_initL1 && (DATA.children||[]).some(c => c.code === _initL1)) {
   goSector(_initL1);
+} else if (isMobile()) {
+  renderMobileOverview();
+  setTabActive(null);
 } else {
   renderOverview();
   setTabActive(null);
@@ -600,9 +697,13 @@ let _resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(() => {
-    activeSector
-      ? renderSector((DATA.children||[]).find(c=>c.code===activeSector))
-      : renderOverview();
+    if (activeSector) {
+      renderSector((DATA.children||[]).find(c=>c.code===activeSector));
+    } else if (isMobile()) {
+      renderMobileOverview();
+    } else {
+      renderOverview();
+    }
   }, 120);
 });
 </script>
